@@ -18,9 +18,12 @@ import adminRoutes from './routes/admin';
 const app = express();
 const PORT = process.env.PORT || 3001;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:8080';
+const BACKEND_URL = process.env.BACKEND_URL
+  || (process.env.NODE_ENV === 'production' ? 'https://agroinova-app-production.up.railway.app' : `http://localhost:${PORT}`);
 const DIST_DIR = path.resolve(__dirname, '../frontend-dist');
 
-app.set('trust proxy', 1);
+console.log(`🔗 BACKEND_URL: ${BACKEND_URL}`);
+
 app.use(cors({ origin: FRONTEND_URL, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -43,7 +46,7 @@ passport.use(new GoogleStrategy(
   {
     clientID: process.env.GOOGLE_CLIENT_ID!,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    callbackURL: '/api/auth/google/callback',
+    callbackURL: `${BACKEND_URL}/api/auth/google/callback`,
   },
   async (_accessToken, _refreshToken, profile, done) => {
     try {
