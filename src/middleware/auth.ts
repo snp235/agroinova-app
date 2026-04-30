@@ -6,6 +6,8 @@ export interface AuthRequest extends Request {
   userId?: string;
   userRole?: string;
   isAdmin?: boolean;
+  file?: Express.Multer.File;
+  files?: Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] };
 }
 
 export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
