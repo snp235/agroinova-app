@@ -3,7 +3,7 @@
 //   url = env("DATABASE_URL")  <- no .env: DATABASE_URL="postgresql://user:pass@host:5432/agroinova"
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
