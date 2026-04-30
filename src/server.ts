@@ -50,6 +50,7 @@ passport.use(new GoogleStrategy(
   },
   async (_accessToken, _refreshToken, profile, done) => {
     try {
+      console.log('🔐 Google OAuth callback - profile.id:', profile.id, 'email:', profile.emails?.[0]?.value);
       const email = profile.emails?.[0]?.value;
       if (!email) return done(new Error('E-mail não disponível na conta Google'), false);
 
@@ -58,8 +59,10 @@ passport.use(new GoogleStrategy(
       if (!user) {
         user = await prisma.user.findUnique({ where: { email } });
         if (user) {
+          console.log('🔗 Linking Google account to existing user:', user.id);
           user = await prisma.user.update({ where: { id: user.id }, data: { googleId: profile.id } });
         } else {
+          console.log('✨ Creating new user from Google profile');
           user = await prisma.user.create({
             data: {
               name: profile.displayName,
@@ -74,8 +77,10 @@ passport.use(new GoogleStrategy(
         }
       }
 
+      console.log('✅ Google OAuth success - userId:', user.id);
       return done(null, user);
     } catch (err) {
+      console.error('❌ Google OAuth error:', err);
       return done(err as Error, false);
     }
   }
@@ -84,7 +89,20 @@ passport.use(new GoogleStrategy(
 app.get('/api/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
 app.get('/api/auth/google/callback',
-  passport.authenticate('google', { session: false, failureRedirect: `${FRONTEND_URL}/login?error=google` }),
+  (req, res, next) => {
+    passport.authenticate('google', { session: false }, (err: any, user: any, info: any) => {
+      if (err) {
+        console.error('❌ passport.authenticate error:', err);
+        return res.redirect(`${FRONTEND_URL}/login?error=google`);
+      }
+      if (!user) {
+        console.error('❌ passport.authenticate no user. info:', info);
+        return res.redirect(`${FRONTEND_URL}/login?error=google`);
+      }
+      req.user = user;
+      next();
+    })(req, res, next);
+  },
   (req, res) => {
     const user = req.user as any;
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '30d' });
