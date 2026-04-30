@@ -20,6 +20,7 @@ const PORT = process.env.PORT || 3001;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:8080';
 const DIST_DIR = path.resolve(__dirname, '../frontend-dist');
 
+app.set('trust proxy', 1);
 app.use(cors({ origin: FRONTEND_URL, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -42,7 +43,7 @@ passport.use(new GoogleStrategy(
   {
     clientID: process.env.GOOGLE_CLIENT_ID!,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    callbackURL: `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/auth/google/callback`,
+    callbackURL: '/api/auth/google/callback',
   },
   async (_accessToken, _refreshToken, profile, done) => {
     try {
