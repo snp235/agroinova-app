@@ -22,10 +22,13 @@ router.post('/register', async (req: Request, res: Response) => {
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const isAdmin = role === 'professor';
+
+  // Cadastro público nunca cria admin. Admins são promovidos manualmente
+  // pelo painel ou pelo seed.
+  const safeRole = role === 'professor' ? 'aluno' : role;
 
   const user = await prisma.user.create({
-    data: { name, email, passwordHash, role, school, isAdmin },
+    data: { name, email, passwordHash, role: safeRole, school, isAdmin: false },
     select: { id: true, name: true, email: true, role: true, school: true, isAdmin: true, avatar: true, xp: true, coletas: true, streak: true, foodIndex: true },
   });
 
@@ -85,6 +88,34 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
   });
   if (!user) { res.status(404).json({ error: 'Usuário não encontrado' }); return; }
   res.json(user);
+});
+
+// PATCH /api/auth/me/password — alterar a própria senha
+router.patch('/me/password', requireAuth, async (req: AuthRequest, res: Response) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!newPassword || newPassword.length < 6) {
+    res.status(400).json({ error: 'Nova senha deve ter ao menos 6 caracteres' });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: req.userId } });
+  if (!user) { res.status(404).json({ error: 'Usuário não encontrado' }); return; }
+
+  // Se já tem senha definida, exige a senha atual. Se a conta foi criada via
+  // Google e ainda não tem senha local, só permite definir uma nova.
+  if (user.passwordHash) {
+    if (!currentPassword) {
+      res.status(400).json({ error: 'Senha atual é obrigatória' });
+      return;
+    }
+    const ok = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!ok) { res.status(401).json({ error: 'Senha atual incorreta' }); return; }
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+
+  res.json({ ok: true });
 });
 
 // PUT /api/auth/me (atualizar perfil)
