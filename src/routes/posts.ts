@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import prisma from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
-import { upload } from '../middleware/upload';
+import { uploadSingle } from '../middleware/upload';
 
 const router = Router();
 
@@ -91,7 +91,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 });
 
 // POST /api/posts (com ou sem imagem)
-router.post('/', requireAuth, upload.single('image'), async (req: AuthRequest, res: Response) => {
+router.post('/', requireAuth, uploadSingle('image'), async (req: AuthRequest, res: Response) => {
   const { type, title, description, garden, category, location, collectTime } = req.body;
 
   if (!type || !title || !description) {

@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import prisma from '../lib/prisma';
 import { requireAuth, requireAdmin, AuthRequest } from '../middleware/auth';
-import { upload } from '../middleware/upload';
+import { uploadSingle } from '../middleware/upload';
 
 const router = Router();
 
@@ -79,7 +79,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 });
 
 // POST /api/gardens (admin)
-router.post('/', requireAuth, requireAdmin, upload.single('image'), async (req: AuthRequest, res: Response) => {
+router.post('/', requireAuth, requireAdmin, uploadSingle('image'), async (req: AuthRequest, res: Response) => {
   const { name, type, status, school, territory, description, responsible, area, address, access, featured, cultivos } = req.body;
 
   if (!name || !type || !school || !territory || !description || !responsible) {
@@ -113,7 +113,7 @@ router.post('/', requireAuth, requireAdmin, upload.single('image'), async (req: 
 });
 
 // PUT /api/gardens/:id (admin)
-router.put('/:id', requireAuth, requireAdmin, upload.single('image'), async (req: AuthRequest, res: Response) => {
+router.put('/:id', requireAuth, requireAdmin, uploadSingle('image'), async (req: AuthRequest, res: Response) => {
   const { name, type, status, school, territory, description, responsible, area, address, access, featured, cultivos } = req.body;
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : req.body.imageUrl;
 
