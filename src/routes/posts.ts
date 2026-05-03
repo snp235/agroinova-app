@@ -66,12 +66,11 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     { description: { contains: String(search) } },
   ];
 
-  const [posts, total] = await Promise.all([
-    prisma.post.findMany({ where, include: postInclude, orderBy: { createdAt: 'desc' }, skip, take: Number(limit) }),
-    prisma.post.count({ where }),
-  ]);
+  const posts = await prisma.post.findMany({
+    where, include: postInclude, orderBy: { createdAt: 'desc' }, skip, take: Number(limit),
+  });
 
-  res.json({ posts: posts.map(p => formatPost(p, req.userId)), total, page: Number(page) });
+  res.json(posts.map(p => formatPost(p, req.userId)));
 });
 
 // GET /api/posts/saved
