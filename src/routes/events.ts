@@ -43,7 +43,7 @@ const eventInclude = {
 // GET /api/events
 router.get('/', async (req: AuthRequest, res: Response) => {
   const { category, type, upcoming, gardenId, search } = req.query;
-  const where: any = { status: { not: 'cancelado' } };
+  const where: any = {};
   if (category) where.category = category;
   if (type) where.type = type;
   if (gardenId) where.gardenId = gardenId;
