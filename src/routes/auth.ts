@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
+import { uploadSingle } from '../middleware/upload';
 
 const router = Router();
 
@@ -118,12 +119,22 @@ router.patch('/me/password', requireAuth, async (req: AuthRequest, res: Response
   res.json({ ok: true });
 });
 
-// PUT /api/auth/me (atualizar perfil)
-router.put('/me', requireAuth, async (req: AuthRequest, res: Response) => {
-  const { name, school, avatar } = req.body;
+// PUT /api/auth/me (atualizar perfil) — aceita avatar como file (multipart) ou string (URL)
+router.put('/me', requireAuth, uploadSingle('avatar'), async (req: AuthRequest, res: Response) => {
+  const { name, school, role } = req.body;
+  let avatar: string | undefined = req.body.avatar;
+  if (req.file) avatar = `/uploads/${req.file.filename}`;
+
+  const allowedRoles = ['aluno', 'professor', 'comunidade', 'agente'];
+
   const user = await prisma.user.update({
     where: { id: req.userId },
-    data: { ...(name && { name }), ...(school && { school }), ...(avatar !== undefined && { avatar }) },
+    data: {
+      ...(name && { name }),
+      ...(school && { school }),
+      ...(avatar !== undefined && { avatar }),
+      ...(role && allowedRoles.includes(role) && { role }),
+    },
     select: { id: true, name: true, email: true, role: true, school: true, isAdmin: true, avatar: true, xp: true, coletas: true, streak: true, foodIndex: true },
   });
   res.json(user);
