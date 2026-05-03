@@ -168,4 +168,13 @@ router.post('/:id/participants', requireAuth, requireAdmin, async (req: AuthRequ
   res.json({ ok: true });
 });
 
+// DELETE /api/gardens/:id (admin)
+router.delete('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: Response) => {
+  const garden = await prisma.garden.findUnique({ where: { id: req.params.id } });
+  if (!garden) { res.status(404).json({ error: 'Horta não encontrada' }); return; }
+
+  await prisma.garden.delete({ where: { id: req.params.id } });
+  res.json({ ok: true });
+});
+
 export default router;

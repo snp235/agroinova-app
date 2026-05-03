@@ -110,6 +110,15 @@ router.put('/:id', requireAuth, requireAdmin, upload.single('coverImage'), async
   res.json(formatEvent(event, req.userId));
 });
 
+// DELETE /api/events/:id (admin) — remoção definitiva
+router.delete('/:id', requireAuth, requireAdmin, async (req: AuthRequest, res: Response) => {
+  const event = await prisma.event.findUnique({ where: { id: req.params.id } });
+  if (!event) { res.status(404).json({ error: 'Evento não encontrado' }); return; }
+
+  await prisma.event.delete({ where: { id: req.params.id } });
+  res.json({ ok: true });
+});
+
 // POST /api/events/:id/interest — toggle interesse
 router.post('/:id/interest', requireAuth, async (req: AuthRequest, res: Response) => {
   const existing = await prisma.eventInterest.findUnique({

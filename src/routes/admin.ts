@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import bcrypt from 'bcryptjs';
 import prisma from '../lib/prisma';
 import { requireAuth, requireAdmin, AuthRequest } from '../middleware/auth';
 
@@ -99,7 +100,7 @@ router.get('/users/:id', async (req: AuthRequest, res: Response) => {
 
 // PUT /api/admin/users/:id (editar status, role, isAdmin)
 router.put('/users/:id', async (req: AuthRequest, res: Response) => {
-  const { status, role, isAdmin, name, school } = req.body;
+  const { status, role, isAdmin, name, school, email } = req.body;
   const user = await prisma.user.update({
     where: { id: req.params.id },
     data: {
@@ -108,9 +109,61 @@ router.put('/users/:id', async (req: AuthRequest, res: Response) => {
       ...(isAdmin !== undefined && { isAdmin }),
       ...(name && { name }),
       ...(school && { school }),
+      ...(email && { email }),
     },
   });
   res.json(user);
+});
+
+// POST /api/admin/users (criar usuário manualmente)
+router.post('/users', async (req: AuthRequest, res: Response) => {
+  const { name, email, role, school, password, isAdmin } = req.body;
+
+  if (!name || !email || !role) {
+    res.status(400).json({ error: 'name, email e role são obrigatórios' });
+    return;
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    res.status(400).json({ error: 'E-mail já cadastrado', existingId: existing.id });
+    return;
+  }
+
+  const passwordHash = password ? await bcrypt.hash(password, 10) : null;
+
+  const user = await prisma.user.create({
+    data: {
+      name, email, role,
+      school: school || 'A definir',
+      passwordHash,
+      isAdmin: !!isAdmin,
+    },
+  });
+
+  res.status(201).json(user);
+});
+
+// DELETE /api/admin/users/:id (excluir permanentemente — só desativadas)
+router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
+  const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!user) { res.status(404).json({ error: 'Usuário não encontrado' }); return; }
+
+  if (user.status !== 'desativado') {
+    res.status(400).json({ error: 'Para excluir permanentemente, primeiro desative a conta.' });
+    return;
+  }
+
+  // FK Post.authorId é RESTRICT por padrão. Deletamos posts e relações do
+  // usuário em transação antes de remover o usuário.
+  await prisma.$transaction([
+    prisma.post.deleteMany({ where: { authorId: req.params.id } }),
+    prisma.event.deleteMany({ where: { organizerId: req.params.id } }),
+    prisma.eventSuggestion.deleteMany({ where: { authorId: req.params.id } }),
+    prisma.user.delete({ where: { id: req.params.id } }),
+  ]);
+
+  res.json({ ok: true });
 });
 
 // GET /api/admin/curadoria — coletas pendentes de identificação
