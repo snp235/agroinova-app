@@ -14,6 +14,8 @@ import gardensRoutes from './routes/gardens';
 import eventsRoutes from './routes/events';
 import gamificationRoutes from './routes/gamification';
 import adminRoutes from './routes/admin';
+import notificationsRoutes from './routes/notifications';
+import moderationRoutes from './routes/moderation';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -120,6 +122,8 @@ app.use('/api/gardens', gardensRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/gamification', gamificationRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/notifications', notificationsRoutes);
+app.use('/api/moderation', moderationRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', time: new Date() }));
 

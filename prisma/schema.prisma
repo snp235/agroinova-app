@@ -40,6 +40,43 @@ model User {
   medals            UserMedal[]
   leafHistory       LeafEntry[]
   foodAnswers       FoodAnswer[]
+  notifications     Notification[]
+  reportsCreated    Report[] @relation("Reporter")
+  reportsReviewed   Report[] @relation("Reviewer")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // post_identified | event_suggestion_approved | event_suggestion_rejected | post_reported_action | system
+  title     String
+  body      String
+  linkTo    String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+}
+
+model Report {
+  id           String    @id @default(cuid())
+  postId       String
+  reporterId   String
+  reason       String
+  reviewerId   String?
+  resolution   String    @default("aberta") // aberta | mantida | removida | aviso
+  reviewerNote String?
+  createdAt    DateTime  @default(now())
+  reviewedAt   DateTime?
+
+  post     Post  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reporter User  @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reviewer User? @relation("Reviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  @@index([resolution])
+  @@index([postId])
 }
 
 model Post {
@@ -68,6 +105,7 @@ model Post {
   author    User       @relation(fields: [authorId], references: [id])
   postLikes PostLike[]
   postSaves PostSave[]
+  reports   Report[]
 }
 
 model PostLike {

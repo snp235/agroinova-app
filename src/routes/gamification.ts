@@ -101,6 +101,23 @@ router.get('/ranking', async (_req: AuthRequest, res: Response) => {
   res.json(ranking);
 });
 
+// GET /api/gamification/food-answers
+router.get('/food-answers', requireAuth, async (req: AuthRequest, res: Response) => {
+  const [answers, user] = await Promise.all([
+    prisma.foodAnswer.findMany({
+      where: { userId: req.userId },
+      orderBy: { createdAt: 'desc' },
+      distinct: ['questionId'],
+    }),
+    prisma.user.findUnique({ where: { id: req.userId }, select: { foodIndex: true } }),
+  ]);
+
+  res.json({
+    answers: answers.map(a => ({ questionId: a.questionId, answer: a.answer })),
+    foodIndex: user?.foodIndex ?? null,
+  });
+});
+
 // POST /api/gamification/food-answers
 router.post('/food-answers', requireAuth, async (req: AuthRequest, res: Response) => {
   const { answers } = req.body; // [{ questionId: 1, answer: 3 }, ...]

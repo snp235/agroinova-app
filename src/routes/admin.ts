@@ -2,13 +2,14 @@ import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../lib/prisma';
 import { requireAuth, requireAdmin, AuthRequest } from '../middleware/auth';
+import { notify } from '../lib/notify';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
 // GET /api/admin/stats
 router.get('/stats', async (_req: AuthRequest, res: Response) => {
-  const [totalUsers, activeUsers, admins, inactiveUsers, gardens, postsThisWeek, postsToday, pendingCurations, pendingSuggestions] = await Promise.all([
+  const [totalUsers, activeUsers, admins, inactiveUsers, gardens, postsThisWeek, postsToday, pendingCurations, pendingSuggestions, reportedPostsCount] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { status: 'ativo' } }),
     prisma.user.count({ where: { isAdmin: true } }),
@@ -18,6 +19,7 @@ router.get('/stats', async (_req: AuthRequest, res: Response) => {
     prisma.post.count({ where: { createdAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) }, status: 'ativo' } }),
     prisma.post.count({ where: { type: 'coleta', sciVerified: false, status: 'ativo' } }),
     prisma.eventSuggestion.count({ where: { status: 'pendente' } }),
+    prisma.report.count({ where: { resolution: 'aberta' } }),
   ]);
 
   const activeGardens = gardens.filter(g => g.status === 'ativa').length;
@@ -28,7 +30,7 @@ router.get('/stats', async (_req: AuthRequest, res: Response) => {
     totalUsers, activeUsers, admins, inactiveUsers,
     postsThisWeek, postsToday, activeGardens, gardensInProgress,
     engagementRate, pendingCurations, pendingEventSuggestions: pendingSuggestions,
-    reportedPostsCount: 0,
+    reportedPostsCount,
   });
 });
 
@@ -217,6 +219,14 @@ router.put('/curadoria/:id', async (req: AuthRequest, res: Response) => {
   await prisma.user.update({ where: { id: post.authorId }, data: { xp: { increment: 15 } } });
   await prisma.leafEntry.create({
     data: { userId: post.authorId, action: 'Coleta identificada (bônus)', detail: `${popularName} identificada`, amount: 15 },
+  });
+
+  await notify({
+    userId: post.authorId,
+    type: 'post_identified',
+    title: 'Sua coleta foi identificada',
+    body: `Um professor identificou "${post.title}" como ${popularName}. Você ganhou +15 folhas!`,
+    linkTo: `/publicacao/${post.id}`,
   });
 
   res.json({ ok: true, post });

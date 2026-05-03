@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import prisma from '../lib/prisma';
 import { requireAuth, requireAdmin, AuthRequest } from '../middleware/auth';
 import { uploadSingle } from '../middleware/upload';
+import { notify } from '../lib/notify';
 
 const router = Router();
 
@@ -188,6 +189,26 @@ router.put('/suggestions/:id', requireAuth, requireAdmin, async (req: AuthReques
     data: { status, rejectionMessage: rejectionMessage || null },
     include: { author: { select: { id: true, name: true, role: true, school: true, avatar: true } } },
   });
+
+  if (status === 'aprovada') {
+    await notify({
+      userId: suggestion.authorId,
+      type: 'event_suggestion_approved',
+      title: 'Sua sugestão de evento foi aprovada',
+      body: `"${suggestion.title}" foi aprovada e pode virar um evento em breve.`,
+      linkTo: `/eventos`,
+    });
+  } else {
+    await notify({
+      userId: suggestion.authorId,
+      type: 'event_suggestion_rejected',
+      title: 'Sua sugestão de evento foi recusada',
+      body: rejectionMessage
+        ? `"${suggestion.title}" foi recusada. Motivo: ${rejectionMessage}`
+        : `"${suggestion.title}" foi recusada pelo administrador.`,
+      linkTo: null,
+    });
+  }
 
   res.json({ ...suggestion, timeAgo: getTimeAgo(suggestion.createdAt) });
 });
