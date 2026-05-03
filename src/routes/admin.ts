@@ -232,6 +232,158 @@ router.put('/curadoria/:id', async (req: AuthRequest, res: Response) => {
   res.json({ ok: true, post });
 });
 
+// GET /api/admin/reports?period=week|month|semester|year
+router.get('/reports', async (req: AuthRequest, res: Response) => {
+  const period = (req.query.period as string) || 'semester';
+  const now = new Date();
+
+  function periodStart(p: string, end: Date): Date {
+    const d = new Date(end);
+    if (p === 'week') d.setDate(d.getDate() - 7);
+    else if (p === 'month') d.setMonth(d.getMonth() - 1);
+    else if (p === 'year') d.setFullYear(d.getFullYear() - 1);
+    else d.setMonth(d.getMonth() - 6); // semester (default)
+    return d;
+  }
+
+  const start = periodStart(period, now);
+  const previousStart = periodStart(period, start);
+
+  const [
+    totalUsersCurrent, totalUsersPrev,
+    activeUsersCurrent, activeUsersPrev,
+    publicationsCurrent, publicationsPrev,
+    sciCollectsCurrent, sciCollectsPrev,
+    eventsRealizedCurrent,
+    studentsInvolved,
+    schoolsCount,
+    schoolsWithPosts,
+    biodTotalCollects,
+    biodIdentifiedCount,
+    biodUniqueSpeciesRaw,
+    foodResponses,
+    foodAvgUsers,
+    studentsTotal,
+    studentsResponded,
+    foodIndexBuckets,
+    activePosts,
+    activeStudentsLog,
+    activeGardens,
+    organizations,
+  ] = await Promise.all([
+    prisma.user.count({ where: { createdAt: { lte: now } } }),
+    prisma.user.count({ where: { createdAt: { lte: start } } }),
+    prisma.user.count({ where: { lastActive: { gte: start, lte: now } } }),
+    prisma.user.count({ where: { lastActive: { gte: previousStart, lt: start } } }),
+    prisma.post.count({ where: { createdAt: { gte: start, lte: now }, status: 'ativo' } }),
+    prisma.post.count({ where: { createdAt: { gte: previousStart, lt: start }, status: 'ativo' } }),
+    prisma.post.count({ where: { type: 'coleta', createdAt: { gte: start, lte: now }, status: 'ativo' } }),
+    prisma.post.count({ where: { type: 'coleta', createdAt: { gte: previousStart, lt: start }, status: 'ativo' } }),
+    prisma.event.count({ where: { createdAt: { gte: start, lte: now }, status: { not: 'cancelado' } } }),
+    prisma.user.count({ where: { role: 'aluno', status: { not: 'desativado' } } }),
+    prisma.user.findMany({ where: { school: { not: 'A definir' } }, select: { school: true }, distinct: ['school'] }),
+    prisma.user.findMany({
+      where: { school: { not: 'A definir' }, posts: { some: { createdAt: { gte: start } } } },
+      select: { school: true }, distinct: ['school'],
+    }),
+    prisma.post.count({ where: { type: 'coleta', createdAt: { gte: start, lte: now }, status: 'ativo' } }),
+    prisma.post.count({ where: { type: 'coleta', sciVerified: true, createdAt: { gte: start, lte: now }, status: 'ativo' } }),
+    prisma.post.findMany({
+      where: { type: 'coleta', sciVerified: true, sciScientificName: { not: null }, createdAt: { gte: start, lte: now } },
+      select: { sciScientificName: true }, distinct: ['sciScientificName'],
+    }),
+    prisma.foodAnswer.count({ where: { createdAt: { gte: start, lte: now } } }),
+    prisma.user.findMany({ where: { foodIndex: { not: null } }, select: { foodIndex: true } }),
+    prisma.user.count({ where: { role: 'aluno', status: { not: 'desativado' } } }),
+    prisma.user.count({ where: { role: 'aluno', foodIndex: { not: null }, status: { not: 'desativado' } } }),
+    prisma.user.findMany({ where: { foodIndex: { not: null } }, select: { foodIndex: true } }),
+    prisma.post.findMany({ where: { type: 'coleta', createdAt: { gte: start, lte: now }, status: 'ativo' }, select: { createdAt: true, category: true } }),
+    prisma.user.findMany({ where: { lastActive: { gte: start, lte: now }, role: 'aluno' }, select: { lastActive: true } }),
+    prisma.garden.count({ where: { status: 'ativa' } }),
+    prisma.user.findMany({ where: { school: { not: 'A definir' } }, select: { school: true }, distinct: ['school'] }),
+  ]);
+
+  // Buckets semanais (até 12 semanas dentro do período)
+  const totalDays = Math.max(7, Math.round((now.getTime() - start.getTime()) / 86400000));
+  const numBuckets = Math.min(12, Math.max(4, Math.round(totalDays / 7)));
+  const bucketMs = (now.getTime() - start.getTime()) / numBuckets;
+  const buckets = Array.from({ length: numBuckets }, (_, i) => ({
+    week: `Sem ${i + 1}`,
+    from: new Date(start.getTime() + i * bucketMs),
+    to: new Date(start.getTime() + (i + 1) * bucketMs),
+  }));
+
+  const weeklyActiveStudents = buckets.map(b => ({
+    week: b.week,
+    value: activeStudentsLog.filter(u => u.lastActive >= b.from && u.lastActive < b.to).length,
+  }));
+
+  const weeklyCollects = buckets.map(b => {
+    const inBucket = activePosts.filter(p => p.createdAt >= b.from && p.createdAt < b.to);
+    return {
+      week: b.week,
+      serVivo: inBucket.filter(p => p.category === 'ser-vivo').length,
+      impacto: inBucket.filter(p => p.category === 'impacto-ambiental').length,
+    };
+  });
+
+  const engagementCurrent = totalUsersCurrent > 0 ? Math.round((activeUsersCurrent / totalUsersCurrent) * 100) : 0;
+  const engagementPrev = totalUsersPrev > 0 ? Math.round((activeUsersPrev / totalUsersPrev) * 100) : 0;
+
+  const foodIndices = foodAvgUsers.map(u => u.foodIndex!).filter((n): n is number => typeof n === 'number');
+  const averageIndex = foodIndices.length > 0
+    ? Math.round(foodIndices.reduce((a, b) => a + b, 0) / foodIndices.length)
+    : 0;
+
+  function bucketFood(min: number, max: number, label: string, color: string) {
+    const list = foodIndexBuckets.filter(u => u.foodIndex! >= min && u.foodIndex! <= max);
+    return { faixa: label, percent: foodIndices.length > 0 ? Math.round((list.length / foodIndices.length) * 100) : 0, count: list.length, color };
+  }
+
+  const foodIndexDistribution = foodIndices.length === 0 ? [] : [
+    bucketFood(81, 100, 'Ótimo (81-100)', '#15803d'),
+    bucketFood(61, 80, 'Bom (61-80)', '#22c55e'),
+    bucketFood(41, 60, 'Regular (41-60)', '#eab308'),
+    bucketFood(21, 40, 'Ruim (21-40)', '#ef4444'),
+    bucketFood(0, 20, 'Muito ruim (0-20)', '#dc2626'),
+  ];
+
+  res.json({
+    period,
+    kpis: {
+      activeUsers: { current: activeUsersCurrent, previous: activeUsersPrev },
+      publications: { current: publicationsCurrent, previous: publicationsPrev },
+      scientificCollects: { current: sciCollectsCurrent, previous: sciCollectsPrev },
+      engagementRate: { current: engagementCurrent, previous: engagementPrev },
+    },
+    education: {
+      studentsInvolved,
+      eventsRealized: eventsRealizedCurrent,
+      schoolParticipation: schoolsCount.length > 0
+        ? Math.round((schoolsWithPosts.length / schoolsCount.length) * 100)
+        : 0,
+      weeklyActiveStudents,
+    },
+    biodiversity: {
+      totalCollects: biodTotalCollects,
+      uniqueSpecies: biodUniqueSpeciesRaw.length,
+      identifiedPercent: biodTotalCollects > 0 ? Math.round((biodIdentifiedCount / biodTotalCollects) * 100) : 0,
+      weeklyCollects,
+    },
+    food: {
+      totalResponses: foodResponses,
+      averageIndex,
+      studentsResponded: studentsTotal > 0 ? Math.round((studentsResponded / studentsTotal) * 100) : 0,
+      foodIndexDistribution,
+    },
+    mecGoals: [
+      { id: 'hortas', title: 'Hortas implantadas', icon: 'Sprout', goal: 4, done: activeGardens },
+      { id: 'students', title: 'Estudantes envolvidos', icon: 'Users', goal: 200, done: studentsInvolved },
+      { id: 'orgs', title: 'Organizações parceiras ativas', icon: 'Building2', goal: 15, done: organizations.length },
+    ],
+  });
+});
+
 // GET /api/admin/activity — log de atividades recentes
 router.get('/activity', async (_req: AuthRequest, res: Response) => {
   const [recentPosts, recentUsers, recentLeaves] = await Promise.all([
