@@ -28,6 +28,8 @@ function formatGarden(g: any) {
     responsible: g.responsible,
     area: g.area,
     address: g.address,
+    latitude: g.latitude,
+    longitude: g.longitude,
     access: g.access,
     featured: g.featured,
     createdAt: g.createdAt,
@@ -80,7 +82,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
 // POST /api/gardens (admin)
 router.post('/', requireAuth, requireAdmin, uploadSingle('image'), async (req: AuthRequest, res: Response) => {
-  const { name, type, status, school, territory, description, responsible, area, address, access, featured, cultivos } = req.body;
+  const { name, type, status, school, territory, description, responsible, area, address, access, featured, cultivos, latitude, longitude } = req.body;
 
   if (!name || !type || !school || !territory || !description || !responsible) {
     res.status(400).json({ error: 'Campos obrigatórios faltando' });
@@ -88,11 +90,15 @@ router.post('/', requireAuth, requireAdmin, uploadSingle('image'), async (req: A
   }
 
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : req.body.imageUrl || '';
+  const lat = latitude !== undefined && latitude !== '' ? Number(latitude) : null;
+  const lng = longitude !== undefined && longitude !== '' ? Number(longitude) : null;
 
   const garden = await prisma.garden.create({
     data: {
       name, type, status: status || 'ativa', school, territory, description,
       responsible, area, address, access, featured: featured === 'true',
+      latitude: Number.isFinite(lat) ? lat : null,
+      longitude: Number.isFinite(lng) ? lng : null,
       image: imageUrl,
       cultivoList: cultivos ? {
         create: JSON.parse(cultivos).map((c: string) => ({ cultivo: c })),
@@ -114,7 +120,7 @@ router.post('/', requireAuth, requireAdmin, uploadSingle('image'), async (req: A
 
 // PUT /api/gardens/:id (admin)
 router.put('/:id', requireAuth, requireAdmin, uploadSingle('image'), async (req: AuthRequest, res: Response) => {
-  const { name, type, status, school, territory, description, responsible, area, address, access, featured, cultivos } = req.body;
+  const { name, type, status, school, territory, description, responsible, area, address, access, featured, cultivos, latitude, longitude } = req.body;
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : req.body.imageUrl;
 
   const garden = await prisma.garden.update({
@@ -124,6 +130,8 @@ router.put('/:id', requireAuth, requireAdmin, uploadSingle('image'), async (req:
       ...(school && { school }), ...(territory && { territory }),
       ...(description && { description }), ...(responsible && { responsible }),
       ...(area !== undefined && { area }), ...(address !== undefined && { address }),
+      ...(latitude !== undefined && latitude !== '' && { latitude: Number(latitude) }),
+      ...(longitude !== undefined && longitude !== '' && { longitude: Number(longitude) }),
       ...(access !== undefined && { access }), ...(featured !== undefined && { featured: featured === 'true' }),
       ...(imageUrl && { image: imageUrl }),
       ...(cultivos && {

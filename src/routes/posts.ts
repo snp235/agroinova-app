@@ -18,6 +18,8 @@ function formatPost(post: any, userId?: string) {
     garden: post.garden,
     category: post.category,
     location: post.location,
+    latitude: post.latitude,
+    longitude: post.longitude,
     collectTime: post.collectTime,
     createdAt: post.createdAt,
     timeAgo: getTimeAgo(post.createdAt),
@@ -92,7 +94,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
 // POST /api/posts (com ou sem imagem)
 router.post('/', requireAuth, uploadSingle('image'), async (req: AuthRequest, res: Response) => {
-  const { type, title, description, garden, category, location, collectTime } = req.body;
+  const { type, title, description, garden, category, location, collectTime, latitude, longitude } = req.body;
 
   if (!type || !title || !description) {
     res.status(400).json({ error: 'type, title e description são obrigatórios' });
@@ -100,10 +102,14 @@ router.post('/', requireAuth, uploadSingle('image'), async (req: AuthRequest, re
   }
 
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : req.body.imageUrl || null;
+  const lat = latitude !== undefined && latitude !== '' ? Number(latitude) : null;
+  const lng = longitude !== undefined && longitude !== '' ? Number(longitude) : null;
 
   const post = await prisma.post.create({
     data: {
       type, title, description, garden, category, location, collectTime,
+      latitude: Number.isFinite(lat) ? lat : null,
+      longitude: Number.isFinite(lng) ? lng : null,
       image: imageUrl,
       authorId: req.userId!,
       sciVerified: false,

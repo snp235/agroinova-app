@@ -232,6 +232,48 @@ router.put('/curadoria/:id', async (req: AuthRequest, res: Response) => {
   res.json({ ok: true, post });
 });
 
+// GET /api/admin/map-points — todas coletas e hortas com coordenadas
+router.get('/map-points', async (_req: AuthRequest, res: Response) => {
+  const [posts, gardens] = await Promise.all([
+    prisma.post.findMany({
+      where: {
+        type: 'coleta',
+        status: 'ativo',
+        latitude: { not: null },
+        longitude: { not: null },
+      },
+      select: {
+        id: true, title: true, category: true, image: true,
+        latitude: true, longitude: true, createdAt: true, location: true,
+        author: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.garden.findMany({
+      where: { latitude: { not: null }, longitude: { not: null } },
+      select: {
+        id: true, name: true, type: true, status: true, image: true,
+        latitude: true, longitude: true, school: true, territory: true,
+      },
+    }),
+  ]);
+
+  res.json({
+    posts: posts.map(p => ({
+      id: p.id,
+      title: p.title,
+      category: p.category,
+      image: p.image,
+      latitude: p.latitude,
+      longitude: p.longitude,
+      location: p.location,
+      createdAt: p.createdAt,
+      author: p.author,
+    })),
+    gardens,
+  });
+});
+
 // GET /api/admin/reports?period=week|month|semester|year
 router.get('/reports', async (req: AuthRequest, res: Response) => {
   const period = (req.query.period as string) || 'semester';

@@ -89,6 +89,8 @@ model Post {
   garden      String?
   category    String?  // ser-vivo | impacto-ambiental
   location    String?
+  latitude    Float?
+  longitude   Float?
   collectTime String?
   status      String   @default("ativo") // ativo | removida | pendente
   createdAt   DateTime @default(now())
@@ -138,6 +140,8 @@ model Garden {
   responsible String
   area        String?
   address     String?
+  latitude    Float?
+  longitude   Float?
   access      String?  // equipe | comunidade
   featured    Boolean  @default(false)
   createdAt   DateTime @default(now())
