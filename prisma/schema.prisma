@@ -86,7 +86,8 @@ model Post {
   title       String
   description String
   image       String?
-  garden      String?
+  garden      String?  // legado: nome livre (mantido para posts antigos sem gardenId)
+  gardenId    String?
   category    String?  // ser-vivo | impacto-ambiental
   location    String?
   latitude    Float?
@@ -105,6 +106,7 @@ model Post {
   sciEcologicalInfo String?
 
   author    User       @relation(fields: [authorId], references: [id])
+  gardenRef Garden?    @relation(fields: [gardenId], references: [id], onDelete: SetNull)
   postLikes PostLike[]
   postSaves PostSave[]
   reports   Report[]
@@ -151,6 +153,7 @@ model Garden {
   participants GardenParticipant[]
   events       Event[]
   cultivoList  GardenCultivo[]
+  posts        Post[]
 }
 
 model GardenCultivo {

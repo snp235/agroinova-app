@@ -10,6 +10,11 @@ export interface AuthRequest extends Request {
   files?: Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] };
 }
 
+// Cache em memória do último bump de lastActive por usuário.
+// Evita escrever no DB a cada request — só atualiza se passou >5min.
+const lastActiveCache = new Map<string, number>();
+const LAST_ACTIVE_THROTTLE_MS = 5 * 60 * 1000;
+
 export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) {
@@ -27,6 +32,15 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
     req.userId = user.id;
     req.userRole = user.role;
     req.isAdmin = user.isAdmin;
+
+    const now = Date.now();
+    const lastBumped = lastActiveCache.get(user.id) ?? 0;
+    if (now - lastBumped > LAST_ACTIVE_THROTTLE_MS) {
+      lastActiveCache.set(user.id, now);
+      prisma.user.update({ where: { id: user.id }, data: { lastActive: new Date() } })
+        .catch(() => { /* não bloqueia o request se falhar */ });
+    }
+
     next();
   } catch {
     res.status(401).json({ error: 'Token inválido' });

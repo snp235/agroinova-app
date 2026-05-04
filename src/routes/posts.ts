@@ -6,6 +6,11 @@ import { uploadSingle } from '../middleware/upload';
 const router = Router();
 
 function formatPost(post: any, userId?: string) {
+  // gardenRef vem do FK; post.garden (string) é legado para posts criados antes do FK existir.
+  const gardenInfo = post.gardenRef
+    ? { id: post.gardenRef.id, name: post.gardenRef.name }
+    : (post.garden ? { id: null, name: post.garden } : null);
+
   return {
     id: post.id,
     type: post.type,
@@ -15,7 +20,7 @@ function formatPost(post: any, userId?: string) {
     likes: post.postLikes?.length ?? 0,
     liked: userId ? post.postLikes?.some((l: any) => l.userId === userId) : false,
     saved: userId ? post.postSaves?.some((s: any) => s.userId === userId) : false,
-    garden: post.garden,
+    garden: gardenInfo,
     category: post.category,
     location: post.location,
     latitude: post.latitude,
@@ -51,6 +56,7 @@ function getTimeAgo(date: Date | string): string {
 
 const postInclude = {
   author: true,
+  gardenRef: { select: { id: true, name: true } },
   postLikes: { select: { userId: true } },
   postSaves: { select: { userId: true } },
 };
@@ -94,7 +100,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
 // POST /api/posts (com ou sem imagem)
 router.post('/', requireAuth, uploadSingle('image'), async (req: AuthRequest, res: Response) => {
-  const { type, title, description, garden, category, location, collectTime, latitude, longitude } = req.body;
+  const { type, title, description, garden, gardenId, category, location, collectTime, latitude, longitude } = req.body;
 
   if (!type || !title || !description) {
     res.status(400).json({ error: 'type, title e description são obrigatórios' });
@@ -105,9 +111,23 @@ router.post('/', requireAuth, uploadSingle('image'), async (req: AuthRequest, re
   const lat = latitude !== undefined && latitude !== '' ? Number(latitude) : null;
   const lng = longitude !== undefined && longitude !== '' ? Number(longitude) : null;
 
+  // Resolve gardenId → nome para preencher o campo legado também (manter compatibilidade)
+  let resolvedGardenName: string | null = garden || null;
+  let resolvedGardenId: string | null = null;
+  if (gardenId) {
+    const g = await prisma.garden.findUnique({ where: { id: gardenId }, select: { id: true, name: true } });
+    if (g) {
+      resolvedGardenId = g.id;
+      resolvedGardenName = g.name;
+    }
+  }
+
   const post = await prisma.post.create({
     data: {
-      type, title, description, garden, category, location, collectTime,
+      type, title, description,
+      garden: resolvedGardenName,
+      gardenId: resolvedGardenId,
+      category, location, collectTime,
       latitude: Number.isFinite(lat) ? lat : null,
       longitude: Number.isFinite(lng) ? lng : null,
       image: imageUrl,

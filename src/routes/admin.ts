@@ -9,22 +9,25 @@ router.use(requireAuth, requireAdmin);
 
 // GET /api/admin/stats
 router.get('/stats', async (_req: AuthRequest, res: Response) => {
-  const [totalUsers, activeUsers, admins, inactiveUsers, gardens, postsThisWeek, postsToday, pendingCurations, pendingSuggestions, reportedPostsCount] = await Promise.all([
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000);
+  const [totalUsers, activeUsers, admins, inactiveUsers, gardens, postsThisWeek, postsToday, pendingCurations, pendingSuggestions, reportedPostsCount, engagedThisWeek] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { status: 'ativo' } }),
     prisma.user.count({ where: { isAdmin: true } }),
     prisma.user.count({ where: { status: 'inativo' } }),
     prisma.garden.findMany({ select: { status: true } }),
-    prisma.post.count({ where: { createdAt: { gte: new Date(Date.now() - 7 * 86400000) }, status: 'ativo' } }),
+    prisma.post.count({ where: { createdAt: { gte: sevenDaysAgo }, status: 'ativo' } }),
     prisma.post.count({ where: { createdAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) }, status: 'ativo' } }),
     prisma.post.count({ where: { type: 'coleta', sciVerified: false, status: 'ativo' } }),
     prisma.eventSuggestion.count({ where: { status: 'pendente' } }),
     prisma.report.count({ where: { resolution: 'aberta' } }),
+    prisma.user.count({ where: { status: 'ativo', lastActive: { gte: sevenDaysAgo } } }),
   ]);
 
   const activeGardens = gardens.filter(g => g.status === 'ativa').length;
   const gardensInProgress = gardens.filter(g => g.status === 'implantacao').length;
-  const engagementRate = totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0;
+  // Taxa de engajamento: % de usuários ativos com atividade nos últimos 7 dias.
+  const engagementRate = activeUsers > 0 ? Math.round((engagedThisWeek / activeUsers) * 100) : 0;
 
   res.json({
     totalUsers, activeUsers, admins, inactiveUsers,
@@ -85,6 +88,11 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
   }));
 });
 
+function sanitizeUser<T extends { passwordHash?: string | null; googleId?: string | null }>(u: T): Omit<T, 'passwordHash' | 'googleId'> {
+  const { passwordHash: _ph, googleId: _gid, ...rest } = u;
+  return rest;
+}
+
 // GET /api/admin/users/:id
 router.get('/users/:id', async (req: AuthRequest, res: Response) => {
   const user = await prisma.user.findUnique({
@@ -97,7 +105,7 @@ router.get('/users/:id', async (req: AuthRequest, res: Response) => {
     },
   });
   if (!user) { res.status(404).json({ error: 'Usuário não encontrado' }); return; }
-  res.json(user);
+  res.json(sanitizeUser(user));
 });
 
 // PUT /api/admin/users/:id (editar status, role, isAdmin)
@@ -114,7 +122,7 @@ router.put('/users/:id', async (req: AuthRequest, res: Response) => {
       ...(email && { email }),
     },
   });
-  res.json(user);
+  res.json(sanitizeUser(user));
 });
 
 // POST /api/admin/users (criar usuário manualmente)
@@ -143,7 +151,7 @@ router.post('/users', async (req: AuthRequest, res: Response) => {
     },
   });
 
-  res.status(201).json(user);
+  res.status(201).json(sanitizeUser(user));
 });
 
 // DELETE /api/admin/users/:id (excluir permanentemente — só desativadas)

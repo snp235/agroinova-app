@@ -194,8 +194,8 @@ router.put('/suggestions/:id', requireAuth, requireAdmin, async (req: AuthReques
     await notify({
       userId: suggestion.authorId,
       type: 'event_suggestion_approved',
-      title: 'Sua sugestão de evento foi aprovada',
-      body: `"${suggestion.title}" foi aprovada e pode virar um evento em breve.`,
+      title: 'Sua sugestão de evento foi aceita',
+      body: `"${suggestion.title}" foi aceita pela equipe. Em breve ela será publicada na agenda de eventos.`,
       linkTo: `/eventos`,
     });
   } else {
