@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import prisma from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { uploadSingle } from '../middleware/upload';
+import { sendEmail, passwordResetEmail } from '../lib/email';
 
 const router = Router();
 
@@ -111,6 +112,88 @@ router.patch('/me/password', requireAuth, async (req: AuthRequest, res: Response
     }
     const ok = await bcrypt.compare(currentPassword, user.passwordHash);
     if (!ok) { res.status(401).json({ error: 'Senha atual incorreta' }); return; }
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+
+  res.json({ ok: true });
+});
+
+// POST /api/auth/forgot-password — gera token e envia link de reset por e-mail
+router.post('/forgot-password', async (req: Request, res: Response) => {
+  const { email } = req.body;
+  if (!email) {
+    res.status(400).json({ error: 'E-mail é obrigatório' });
+    return;
+  }
+
+  // Resposta sempre 200 — não revelamos se o e-mail existe (anti-enumeração).
+  // Se houver erro REAL de configuração, devolvemos 500 só pra não fingir sucesso.
+  const respondOk = () =>
+    res.json({ ok: true, message: 'Se este e-mail estiver cadastrado, você receberá um link em alguns minutos.' });
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || user.status === 'desativado' || !user.passwordHash) {
+    // Não existe, está desativado, ou só tem login Google → silenciosamente OK.
+    respondOk();
+    return;
+  }
+
+  // Token JWT específico de reset, válido por 30 minutos. Stateless e curto.
+  const resetToken = jwt.sign(
+    { userId: user.id, type: 'password_reset' },
+    process.env.JWT_SECRET!,
+    { expiresIn: '30m' }
+  );
+
+  const baseUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get('host')}`;
+  const resetUrl = `${baseUrl.replace(/\/$/, '')}/redefinir-senha?token=${resetToken}`;
+
+  try {
+    await sendEmail({
+      to: user.email,
+      subject: 'Redefinir sua senha no AgroInova',
+      html: passwordResetEmail(user.name, resetUrl),
+    });
+  } catch (err) {
+    console.error('[forgot-password] envio falhou para', email, err);
+    res.status(500).json({ error: 'Não conseguimos enviar o e-mail agora. Tente de novo em alguns minutos.' });
+    return;
+  }
+
+  respondOk();
+});
+
+// POST /api/auth/reset-password — aplica nova senha usando o token recebido por e-mail
+router.post('/reset-password', async (req: Request, res: Response) => {
+  const { token, newPassword } = req.body;
+  if (!token || !newPassword) {
+    res.status(400).json({ error: 'Token e nova senha são obrigatórios' });
+    return;
+  }
+  if (newPassword.length < 6) {
+    res.status(400).json({ error: 'A nova senha precisa ter ao menos 6 caracteres' });
+    return;
+  }
+
+  let payload: { userId: string; type: string };
+  try {
+    payload = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string; type: string };
+  } catch {
+    res.status(400).json({ error: 'Link inválido ou expirado. Peça um novo.' });
+    return;
+  }
+
+  if (payload.type !== 'password_reset') {
+    res.status(400).json({ error: 'Token de tipo inválido' });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: payload.userId } });
+  if (!user || user.status === 'desativado') {
+    res.status(400).json({ error: 'Conta não encontrada ou desativada' });
+    return;
   }
 
   const passwordHash = await bcrypt.hash(newPassword, 10);
