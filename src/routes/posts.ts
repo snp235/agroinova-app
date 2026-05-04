@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import prisma from '../lib/prisma';
-import { requireAuth, AuthRequest } from '../middleware/auth';
+import { requireAuth, optionalAuth, AuthRequest } from '../middleware/auth';
 import { uploadSingle } from '../middleware/upload';
 
 const router = Router();
@@ -62,7 +62,7 @@ const postInclude = {
 };
 
 // GET /api/posts
-router.get('/', async (req: AuthRequest, res: Response) => {
+router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
   const { type, category, search, page = '1', limit = '20' } = req.query;
   const skip = (Number(page) - 1) * Number(limit);
 
@@ -92,7 +92,7 @@ router.get('/saved', requireAuth, async (req: AuthRequest, res: Response) => {
 });
 
 // GET /api/posts/:id
-router.get('/:id', async (req: AuthRequest, res: Response) => {
+router.get('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
   const post = await prisma.post.findUnique({ where: { id: req.params.id }, include: postInclude });
   if (!post || post.status === 'removida') { res.status(404).json({ error: 'Publicação não encontrada' }); return; }
   res.json(formatPost(post, req.userId));

@@ -54,3 +54,25 @@ export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction
   }
   next();
 }
+
+// Para endpoints públicos que QUEREM saber se há um usuário logado
+// (ex: GET /posts retorna liked/saved específicos do user). Se não houver
+// token ou o token for inválido, segue sem userId — não rejeita.
+export async function optionalAuth(req: AuthRequest, _res: Response, next: NextFunction) {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return next();
+
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+    const user = await prisma.user.findUnique({ where: { id: payload.userId } });
+    if (user && user.status !== 'desativado') {
+      req.userId = user.id;
+      req.userRole = user.role;
+      req.isAdmin = user.isAdmin;
+    }
+  } catch {
+    // token inválido ou expirado — segue como visitante
+  }
+
+  next();
+}

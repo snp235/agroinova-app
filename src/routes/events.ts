@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import prisma from '../lib/prisma';
-import { requireAuth, requireAdmin, AuthRequest } from '../middleware/auth';
+import { requireAuth, requireAdmin, optionalAuth, AuthRequest } from '../middleware/auth';
 import { uploadSingle } from '../middleware/upload';
 import { notify } from '../lib/notify';
 
@@ -41,7 +41,7 @@ const eventInclude = {
 };
 
 // GET /api/events
-router.get('/', async (req: AuthRequest, res: Response) => {
+router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
   const { category, type, upcoming, gardenId, search } = req.query;
   const where: any = {};
   if (category) where.category = category;
@@ -138,7 +138,7 @@ router.put('/suggestions/:id', requireAuth, requireAdmin, async (req: AuthReques
 });
 
 // GET /api/events/:id
-router.get('/:id', async (req: AuthRequest, res: Response) => {
+router.get('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
   const event = await prisma.event.findUnique({ where: { id: req.params.id }, include: eventInclude });
   if (!event) { res.status(404).json({ error: 'Evento não encontrado' }); return; }
   res.json(formatEvent(event, req.userId));
