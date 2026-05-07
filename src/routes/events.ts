@@ -108,6 +108,9 @@ router.put('/suggestions/:id', requireAuth, requireAdmin, async (req: AuthReques
     return;
   }
 
+  const previous = await prisma.eventSuggestion.findUnique({ where: { id: req.params.id } });
+  if (!previous) { res.status(404).json({ error: 'Sugestão não encontrada' }); return; }
+
   const suggestion = await prisma.eventSuggestion.update({
     where: { id: req.params.id },
     data: { status, rejectionMessage: rejectionMessage || null },
@@ -115,12 +118,36 @@ router.put('/suggestions/:id', requireAuth, requireAdmin, async (req: AuthReques
   });
 
   if (status === 'aprovada') {
+    // Cria o Evento real a partir da sugestão (apenas na primeira aprovação,
+    // pra evitar duplicação se o admin reclicar "aprovar").
+    let createdEventId: string | null = null;
+    if (previous.status !== 'aprovada') {
+      const fallbackDate = new Date();
+      fallbackDate.setDate(fallbackDate.getDate() + 7);
+      const date = suggestion.suggestedDate || fallbackDate.toISOString().split('T')[0];
+
+      const newEvent = await prisma.event.create({
+        data: {
+          title: suggestion.title,
+          date,
+          time: '09:00',
+          location: 'A definir',
+          type: 'aberto',
+          category: suggestion.category,
+          description: suggestion.description || suggestion.title,
+          organizerId: req.userId!,
+          status: 'ativo',
+        },
+      });
+      createdEventId = newEvent.id;
+    }
+
     await notify({
       userId: suggestion.authorId,
       type: 'event_suggestion_approved',
       title: 'Sua sugestão de evento foi aceita',
-      body: `"${suggestion.title}" foi aceita pela equipe. Em breve ela será publicada na agenda de eventos.`,
-      linkTo: `/eventos`,
+      body: `"${suggestion.title}" foi publicada na agenda. A equipe pode ajustar data e local antes do evento.`,
+      linkTo: createdEventId ? `/eventos/${createdEventId}` : '/eventos',
     });
   } else {
     await notify({
