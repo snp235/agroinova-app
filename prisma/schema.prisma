@@ -43,6 +43,8 @@ model User {
   notifications     Notification[]
   reportsCreated    Report[] @relation("Reporter")
   reportsReviewed   Report[] @relation("Reviewer")
+  jogoProgressos    JogoProgresso[]
+  jogoSessoes       JogoSessao[]
 }
 
 model Notification {
@@ -266,4 +268,39 @@ model FoodAnswer {
   answer     Int
   createdAt  DateTime @default(now())
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Módulo de jogos ───
+// Uma linha por usuário e jogo. Alimenta os relatórios do projeto.
+model JogoProgresso {
+  userId            String
+  jogoId            String // ex: "composta"
+  recordePontos     Int      @default(0)
+  maiorNivel        Int      @default(0)
+  niveisDescobertos String   @default("") // níveis separados por vírgula, ex: "1,2,3"
+  partidasJogadas   Int      @default(0)
+  partidasVencidas  Int      @default(0)
+  atualizadoEm      DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, jogoId])
+  @@map("jogo_progresso")
+}
+
+// Uma linha por partida encerrada.
+model JogoSessao {
+  id              String   @id @default(cuid())
+  userId          String
+  jogoId          String
+  pontos          Int
+  maiorNivel      Int
+  jogadas         Int
+  duracaoSegundos Int
+  resultado       String // vitoria | sem_jogadas | abandonada
+  iniciadaEm      DateTime
+  encerradaEm     DateTime
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, jogoId])
+  @@map("jogo_sessoes")
 }
